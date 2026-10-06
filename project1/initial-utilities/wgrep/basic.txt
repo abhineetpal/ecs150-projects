@@ -1,0 +1,6 @@
+hello world
+hello there
+goodbye world
+HELLO WORLD
+this is a test
+another hello line

@@ -1,0 +1,11 @@
+hello.world
+hello-world
+hello_world
+hello+world
+hello*world
+hello?world
+[hello]
+(foo)
+foo|bar
+^hello$
+$hello

@@ -1,0 +1,6 @@
+Error: failed
+error: failed
+ERROR: failed
+Error: success
+warning: something happened
+ERROR: success
