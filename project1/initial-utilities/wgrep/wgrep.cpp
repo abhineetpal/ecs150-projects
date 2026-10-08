@@ -3,8 +3,29 @@
 #include <string.h>
 
 #include <string>
-#include <vector>
+#include <bits/stdc++.h>
 using namespace std;
+
+void wgrep(int file_descriptor, char* target) {
+    char buf[1024];
+    string input = "";
+    ssize_t status;
+    
+    do {
+        status = read(file_descriptor, buf, 1024);
+        if (status > 0) input.append(buf, status);
+    } while (status > 0);
+
+    stringstream input_stream(input);
+    string line;
+
+    while (getline(input_stream, line, '\n')) {
+        if (line.find(target) != string::npos) {
+            line += "\n";
+            write(STDOUT_FILENO, line.c_str(), line.size() * sizeof(char));
+        }
+    }
+}
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -15,24 +36,7 @@ int main(int argc, char** argv) {
 
     char* target = argv[1];
     if (argc == 2) {
-        char ch;
-        string line = "";
-        vector<string> input;
-
-        while (read(STDIN_FILENO, &ch, 1) > 0) {
-            if (ch != '\n') line += ch;
-            else {
-                input.push_back(line);
-                line = "";
-            }
-        }
-
-        for (string input_line : input) {
-            if (input_line.find(target) != string::npos) {
-                input_line += "\n";
-                write(STDOUT_FILENO, input_line.c_str(), input_line.size() * sizeof(char));
-            }
-        }
+        wgrep(STDIN_FILENO, target);
     }
     else {
         for (int i = 2; i < argc; i++) {
@@ -43,25 +47,7 @@ int main(int argc, char** argv) {
                 exit(1);
             }
 
-            char ch;
-            string line = "";
-            vector<string> input;
-
-            while (read(fd, &ch, 1) > 0) {
-                if (ch != '\n') line += ch;
-                else {
-                    input.push_back(line);
-                    line = "";
-                }
-            }
-
-            for (string input_line : input) {
-                if (input_line.find(target) != string::npos) {
-                    input_line += "\n";
-                    write(STDOUT_FILENO, input_line.c_str(), input_line.size() * sizeof(char));
-                }
-            }
-
+            wgrep(fd, target);
             close(fd);
         }
     }
