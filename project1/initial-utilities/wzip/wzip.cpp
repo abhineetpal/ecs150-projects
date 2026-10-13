@@ -22,6 +22,7 @@ int main(int argc, char** argv) {
         int fd = open(argv[i], O_RDONLY);
         if (fd == -1) {
             perror(strerror(errno));
+            exit(1);
         }
 
         ssize_t status;
@@ -29,6 +30,7 @@ int main(int argc, char** argv) {
             status = read(fd, &ch, 1);
             if (status == -1) {
                 perror(strerror(errno));
+                exit(1);
             }
 
             if (status > 0) {
