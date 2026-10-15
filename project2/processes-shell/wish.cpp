@@ -36,9 +36,7 @@ void run_cmd(string cmd) {
     if (cmd_found) {
         pid_t pid = fork();
         if (pid == -1) write(STDERR_FILENO, error_message, strlen(error_message));
-        else if (pid == 0) {
-            execv(cmd_path.c_str(), (char* const*)args.c_str());
-        }
+        else if (pid == 0) execv(cmd_path.c_str(), (char* const*)args.c_str());
         else {
             int wstatus;
             wait(&wstatus);
