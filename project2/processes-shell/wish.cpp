@@ -17,13 +17,30 @@ void run_cmd(string cmd) {
     if (cmd == "") return;
 
     string cmd_name;
-    string args = "";
+    string args_str = "";
+    vector<string> arg_vec;
     size_t space_idx = cmd.find(" ");
-    if (space_idx == string::npos) cmd_name = cmd;
+    if (space_idx == string::npos) {
+        cmd_name = cmd;
+        arg_vec.push_back(cmd_name);
+    }
     else {
         cmd_name = cmd.substr(0, space_idx);
-        args = cmd.substr(space_idx + 1);
+        args_str = cmd.substr(space_idx + 1);
+
+        arg_vec.push_back(cmd_name);
+        if (args_str != "") {
+            stringstream args_stream(args_str);
+            string arg;
+            while (getline(args_stream, arg, ' ')) arg_vec.push_back(arg);
+        }
     }
+
+    char* arg_arr[arg_vec.size() + 1];
+    for (size_t i = 0; i < arg_vec.size(); i++) {
+        arg_arr[i] = (char*)arg_vec[i].c_str();
+    }
+    arg_arr[arg_vec.size()] = NULL;
 
     string cmd_path;
     int cmd_found = 0;
@@ -36,7 +53,7 @@ void run_cmd(string cmd) {
     if (cmd_found) {
         pid_t pid = fork();
         if (pid == -1) write(STDERR_FILENO, error_message, strlen(error_message));
-        else if (pid == 0) execv(cmd_path.c_str(), (char* const*)args.c_str());
+        else if (pid == 0) execv(cmd_path.c_str(), arg_arr);
         else {
             int wstatus;
             wait(&wstatus);
@@ -74,26 +91,23 @@ int main(int argc, char** argv) {
 
         stringstream input_stream(file_str);
         string cmd;
-
-        while (getline(input_stream, cmd)) {
-            run_cmd(cmd);
-        }
+        while (getline(input_stream, cmd)) run_cmd(cmd);
         
         if (close(fd) == -1) {
             write(STDERR_FILENO, error_message, strlen(error_message));
             exit(1);
         }
     }
-    // else {
-    //     write(STDOUT_FILENO, prompt.c_str(), prompt.size());
+    else {
+        write(STDOUT_FILENO, prompt.c_str(), prompt.size());
 
-    //     string cmd;
-    //     while (getline(cin, cmd)) {
-    //         if (cmd == "exit") exit(0);
-    //         run_cmd(cmd);
-    //         write(STDOUT_FILENO, prompt.c_str(), prompt.size());
-    //     }
-    // }
+        string cmd;
+        while (getline(cin, cmd)) {
+            if (cmd == "exit") exit(0);
+            run_cmd(cmd);
+            write(STDOUT_FILENO, prompt.c_str(), prompt.size());
+        }
+    }
 
     return 0;
 }
