@@ -41,10 +41,21 @@ void run_cmd(string cmd) {
             return;
         }
 
-        path = trim_left(path); // there could be many spaces between "cd" and the input path
+        path = trim_left(path); // there could be more whitespace between "cd" and the input path
         if (chdir(path.c_str()) == -1) { // don't check if there are 2 or more arguments because that will also cause chdir to fail
             write(STDERR_FILENO, error_message, strlen(error_message));
             return;
+        }
+        return;
+    }
+    if (cmd.substr(0, 4) == "path") {
+        string paths = cmd.substr(4);
+        path_vars.clear();
+
+        stringstream path_stream(paths);
+        string path_var;
+        while (getline(path_stream, path_var, ' ')) {
+            if (!all_of(path_var.begin(), path_var.end(), ::isspace)) path_vars.push_back(path_var);
         }
         return;
     }
