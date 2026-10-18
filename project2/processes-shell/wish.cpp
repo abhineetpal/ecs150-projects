@@ -66,7 +66,7 @@ void run_cmd(string cmd) {
             stringstream args_stream(args_str);
             string arg;
             while (getline(args_stream, arg, ' ')) {
-                if (arg != "") arg_vec.push_back(arg);
+                if (!all_of(arg.begin(), arg.end(), ::isspace)) arg_vec.push_back(arg);
             }
         }
     }
