@@ -7,14 +7,47 @@
 #include <ios>
 #include <bits/stdc++.h>
 #include <sys/wait.h>
+
 using namespace std;
 
 char error_message[30] = "An error has occurred\n";
 string prompt = "wish> ";
 vector<string> path_vars;
+const string WHITESPACE = " \n\r\t\f\v";
+
+string trim_left(string str) {
+    size_t start = str.find_first_not_of(WHITESPACE);
+    return (start == string::npos) ? "" : str.substr(start);
+}
+
+string trim_right(string str) {
+    size_t end = str.find_last_not_of(WHITESPACE);
+    return (end == string::npos) ? "" : str.substr(0, end + 1);
+}
+
+string trim(string str) {
+    return trim_right(trim_left(str));
+}
 
 void run_cmd(string cmd) {
+    cmd = trim(cmd);
+
     if (cmd == "") return;
+    if (cmd == "exit") exit(0);
+    if (cmd.substr(0, 3) == "cd ") {
+        string path = cmd.substr(3);
+        if (path == "") {
+            write(STDERR_FILENO, error_message, strlen(error_message));
+            return;
+        }
+
+        path = trim_left(path); // there could be many spaces between "cd" and the input path
+        if (chdir(path.c_str()) == -1) { // don't check if there are 2 or more arguments because that will also cause chdir to fail
+            write(STDERR_FILENO, error_message, strlen(error_message));
+            return;
+        }
+        return;
+    }
 
     string cmd_name;
     string args_str = "";
@@ -32,15 +65,18 @@ void run_cmd(string cmd) {
         if (args_str != "") {
             stringstream args_stream(args_str);
             string arg;
-            while (getline(args_stream, arg, ' ')) arg_vec.push_back(arg);
+            while (getline(args_stream, arg, ' ')) {
+                if (arg != "") arg_vec.push_back(arg);
+            }
         }
     }
 
-    char* arg_arr[arg_vec.size() + 1];
-    for (size_t i = 0; i < arg_vec.size(); i++) {
+    size_t num_args = arg_vec.size();
+    char* arg_arr[num_args + 1];
+    for (size_t i = 0; i < num_args; i++) {
         arg_arr[i] = (char*)arg_vec[i].c_str();
     }
-    arg_arr[arg_vec.size()] = NULL;
+    arg_arr[num_args] = NULL;
 
     string cmd_path;
     int cmd_found = 0;
@@ -53,7 +89,10 @@ void run_cmd(string cmd) {
     if (cmd_found) {
         pid_t pid = fork();
         if (pid == -1) write(STDERR_FILENO, error_message, strlen(error_message));
-        else if (pid == 0) execv(cmd_path.c_str(), arg_arr);
+        else if (pid == 0) {
+            execv(cmd_path.c_str(), arg_arr);
+            write(STDERR_FILENO, error_message, strlen(error_message)); // should not reach here if execv successful!
+        }
         else {
             int wstatus;
             wait(&wstatus);
@@ -103,7 +142,6 @@ int main(int argc, char** argv) {
 
         string cmd;
         while (getline(cin, cmd)) {
-            if (cmd == "exit") exit(0);
             run_cmd(cmd);
             write(STDOUT_FILENO, prompt.c_str(), prompt.size());
         }
