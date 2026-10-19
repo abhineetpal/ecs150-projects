@@ -37,35 +37,38 @@ void run_cmd(string cmd) {
     cmd = trim(cmd);
     if (cmd == "") return;
     if (cmd == "exit") exit(0);
-    if (cmd.substr(0, 3) == "cd ") {
-        string path = cmd.substr(3);
-        if (path == "") {
-            write(STDERR_FILENO, error_message, strlen(error_message));
-            return;
-        }
+    if (cmd.substr(0, 2) == "cd") {
+        if (isspace(cmd[2])) { // deals with the case where you call a command that starts with "cd" but is not cd
+            string path = cmd.substr(3);
+            if (path == "") {
+                write(STDERR_FILENO, error_message, strlen(error_message));
+                return;
+            }
 
-        path = trim_left(path); // there could be more whitespace between "cd" and the input path
-        if (chdir(path.c_str()) == -1) { // don't need to check if there are 2 or more arguments because that will also cause chdir to fail
-            write(STDERR_FILENO, error_message, strlen(error_message));
+            path = trim_left(path); // there could be more whitespace between "cd" and the input path
+            if (chdir(path.c_str()) == -1) { // don't need to check if there are 2 or more arguments because that will also cause chdir to fail
+                write(STDERR_FILENO, error_message, strlen(error_message));
+                return;
+            }
             return;
         }
-        return;
     }
     if (cmd.substr(0, 4) == "path") {
-        string paths = cmd.substr(4);
-        path_vars.clear();
+        if (isspace(cmd[4])) { // deals with the case where you call a command that starts with "path" but is not path
+            string paths = cmd.substr(5);
+            path_vars.clear();
 
-        stringstream path_stream(paths);
-        string path_var;
-        while (getline(path_stream, path_var, ' ')) {
-            if (!all_of(path_var.begin(), path_var.end(), ::isspace)) path_vars.push_back(path_var);
+            stringstream path_stream(paths);
+            string path_var;
+            while (path_stream >> path_var) path_vars.push_back(path_var);
+            return;
         }
-        return;
     }
 
     size_t redirect_op_idx = cmd.find('>');
     if (redirect_op_idx != string::npos) {
         string outfile = cmd.substr(redirect_op_idx + 1);
+        cmd = cmd.substr(0, redirect_op_idx - 1);
         outfile = trim_left(outfile); // there could be more whitespace between redirect operator and filename
 
         // Multiple redirection operators are illegal
@@ -74,9 +77,6 @@ void run_cmd(string cmd) {
             write(STDERR_FILENO, error_message, strlen(error_message));
             return;
         }
-
-        cmd = cmd.substr(0, redirect_op_idx - 1);
-        cmd = trim_right(cmd); // there could be more whitespace between command and redirect operator
 
         int fd = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
         if (fd == -1) {
@@ -92,28 +92,12 @@ void run_cmd(string cmd) {
         close(fd);
     }
 
-    string cmd_name;
-    string args_str = "";
+    stringstream args_stream(cmd);
     vector<string> arg_vec;
-    size_t space_idx = cmd.find(" ");
-    if (space_idx == string::npos) {
-        cmd_name = cmd;
-        arg_vec.push_back(cmd_name);
-    }
-    else {
-        cmd_name = cmd.substr(0, space_idx);
-        args_str = cmd.substr(space_idx + 1);
+    string arg;
+    while (args_stream >> arg) arg_vec.push_back(arg);
 
-        arg_vec.push_back(cmd_name);
-        if (args_str != "") {
-            stringstream args_stream(args_str);
-            string arg;
-            while (getline(args_stream, arg, ' ')) {
-                if (!all_of(arg.begin(), arg.end(), ::isspace)) arg_vec.push_back(arg);
-            }
-        }
-    }
-
+    string cmd_name = arg_vec[0];
     size_t num_args = arg_vec.size();
     char* arg_arr[num_args + 1];
     for (size_t i = 0; i < num_args; i++) {

@@ -1,1 +1,1 @@
-ls blah > output.txt
+cat             batch.txt
