@@ -30,8 +30,11 @@ string trim(string str) {
 }
 
 void run_cmd(string cmd) {
-    cmd = trim(cmd);
+    static const int STDOUT_FD = dup(STDOUT_FILENO);
+    static const int STDERR_FD = dup(STDERR_FILENO);
+    bool redirected = false;
 
+    cmd = trim(cmd);
     if (cmd == "") return;
     if (cmd == "exit") exit(0);
     if (cmd.substr(0, 3) == "cd ") {
@@ -42,7 +45,7 @@ void run_cmd(string cmd) {
         }
 
         path = trim_left(path); // there could be more whitespace between "cd" and the input path
-        if (chdir(path.c_str()) == -1) { // don't check if there are 2 or more arguments because that will also cause chdir to fail
+        if (chdir(path.c_str()) == -1) { // don't need to check if there are 2 or more arguments because that will also cause chdir to fail
             write(STDERR_FILENO, error_message, strlen(error_message));
             return;
         }
@@ -58,6 +61,35 @@ void run_cmd(string cmd) {
             if (!all_of(path_var.begin(), path_var.end(), ::isspace)) path_vars.push_back(path_var);
         }
         return;
+    }
+
+    size_t redirect_op_idx = cmd.find('>');
+    if (redirect_op_idx != string::npos) {
+        string outfile = cmd.substr(redirect_op_idx + 1);
+        outfile = trim_left(outfile); // there could be more whitespace between redirect operator and filename
+
+        // Multiple redirection operators are illegal
+        // Finding whitespace within the string after trimming leading whitespace indicates another file (illegal!)
+        if ((outfile.find('>') != string::npos) || (outfile.find_first_of(WHITESPACE) != string::npos)) {
+            write(STDERR_FILENO, error_message, strlen(error_message));
+            return;
+        }
+
+        cmd = cmd.substr(0, redirect_op_idx - 1);
+        cmd = trim_right(cmd); // there could be more whitespace between command and redirect operator
+
+        int fd = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (fd == -1) {
+            write(STDERR_FILENO, error_message, strlen(error_message));
+            return;
+        }
+
+        if ((dup2(fd, STDOUT_FILENO) == -1) || (dup2(fd, STDERR_FILENO) == -1)) {
+            write(STDERR_FILENO, error_message, strlen(error_message));
+            return;
+        }
+        redirected = true;
+        close(fd);
     }
 
     string cmd_name;
@@ -90,7 +122,7 @@ void run_cmd(string cmd) {
     arg_arr[num_args] = NULL;
 
     string cmd_path;
-    int cmd_found = 0;
+    bool cmd_found = false;
     for (string var : path_vars) {
         cmd_path = var + "/" + cmd_name;
         cmd_found = access(cmd_path.c_str(), X_OK) == 0;
@@ -108,6 +140,13 @@ void run_cmd(string cmd) {
             int wstatus;
             wait(&wstatus);
             if (wstatus == -1) write(STDERR_FILENO, error_message, strlen(error_message));
+
+            if (redirected) {
+                if ((dup2(STDOUT_FD, STDOUT_FILENO) == -1) || (dup2(STDERR_FD, STDERR_FILENO) == -1)) {
+                    write(STDERR_FILENO, error_message, strlen(error_message));
+                    exit(1); // failure to restore standard file descriptors is critical, terminate program
+                }
+            }
         }
     }
     else write(STDERR_FILENO, error_message, strlen(error_message));
