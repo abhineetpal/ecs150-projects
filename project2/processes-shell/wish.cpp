@@ -30,9 +30,7 @@ string trim(string str) {
 }
 
 void run_cmd(string cmd) {
-    static const int STDOUT_FD = dup(STDOUT_FILENO);
-    static const int STDERR_FD = dup(STDERR_FILENO);
-    bool redirected = false;
+    bool is_redirect = false;
 
     cmd = trim(cmd);
     if (cmd == "") return;
@@ -66,30 +64,26 @@ void run_cmd(string cmd) {
     }
 
     size_t redirect_op_idx = cmd.find('>');
+    string redirect_outfile_str;
+    int redirect_outfile_fd;
     if (redirect_op_idx != string::npos) {
-        string outfile = cmd.substr(redirect_op_idx + 1);
+        redirect_outfile_str = cmd.substr(redirect_op_idx + 1);
         cmd = cmd.substr(0, redirect_op_idx - 1);
-        outfile = trim_left(outfile); // there could be more whitespace between redirect operator and filename
+        redirect_outfile_str = trim_left(redirect_outfile_str); // there could be more whitespace between redirect operator and filename
 
         // Multiple redirection operators are illegal
         // Finding whitespace within the string after trimming leading whitespace indicates another file (illegal!)
-        if ((outfile.find('>') != string::npos) || (outfile.find_first_of(WHITESPACE) != string::npos)) {
+        if ((redirect_outfile_str.find('>') != string::npos) || (redirect_outfile_str.find_first_of(WHITESPACE) != string::npos)) {
             write(STDERR_FILENO, error_message, strlen(error_message));
             return;
         }
 
-        int fd = open(outfile.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-        if (fd == -1) {
+        redirect_outfile_fd = open(redirect_outfile_str.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (redirect_outfile_fd == -1) {
             write(STDERR_FILENO, error_message, strlen(error_message));
             return;
         }
-
-        if ((dup2(fd, STDOUT_FILENO) == -1) || (dup2(fd, STDERR_FILENO) == -1)) {
-            write(STDERR_FILENO, error_message, strlen(error_message));
-            return;
-        }
-        redirected = true;
-        close(fd);
+        is_redirect = true;
     }
 
     stringstream args_stream(cmd);
@@ -117,6 +111,13 @@ void run_cmd(string cmd) {
         pid_t pid = fork();
         if (pid == -1) write(STDERR_FILENO, error_message, strlen(error_message));
         else if (pid == 0) {
+            if (is_redirect) {
+                if ((dup2(redirect_outfile_fd, STDOUT_FILENO) == -1) || (dup2(redirect_outfile_fd, STDERR_FILENO) == -1)) {
+                    write(STDERR_FILENO, error_message, strlen(error_message));
+                    return;
+                }
+            }
+
             execv(cmd_path.c_str(), arg_arr);
             write(STDERR_FILENO, error_message, strlen(error_message)); // should not reach here if execv successful!
         }
@@ -124,13 +125,6 @@ void run_cmd(string cmd) {
             int wstatus;
             wait(&wstatus);
             if (wstatus == -1) write(STDERR_FILENO, error_message, strlen(error_message));
-
-            if (redirected) {
-                if ((dup2(STDOUT_FD, STDOUT_FILENO) == -1) || (dup2(STDERR_FD, STDERR_FILENO) == -1)) {
-                    write(STDERR_FILENO, error_message, strlen(error_message));
-                    exit(1); // failure to restore standard file descriptors is critical, terminate program
-                }
-            }
         }
     }
     else write(STDERR_FILENO, error_message, strlen(error_message));
