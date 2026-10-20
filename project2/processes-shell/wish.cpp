@@ -135,103 +135,43 @@ void run_cmd(string cmd) {
         }
     }
 
-    Command_t cmd_handle = parse_ext_cmd(cmd);
-    if (cmd_handle.is_valid) {
-        size_t num_args = cmd_handle.args.size();
-        char* arg_arr[num_args + 1];
-        for (size_t i = 0; i < num_args; i++) {
-            arg_arr[i] = (char*)cmd_handle.args[i].c_str();
-        }
-        arg_arr[num_args] = NULL;
+    vector<Command_t> cmd_handles;
+    if (cmd.find('&') != string::npos) {
+        stringstream cmd_stream(cmd);
+        string individual_cmd;
+        while (getline(cmd_stream, individual_cmd, '&')) cmd_handles.push_back(parse_ext_cmd(individual_cmd));
+    }
+    else cmd_handles.push_back(parse_ext_cmd(cmd));
 
-        pid_t pid = fork();
-        if (pid == -1) write(STDERR_FILENO, error_message, strlen(error_message));
-        else if (pid == 0) {
-            if (cmd_handle.is_redirect) {
-                if ((dup2(cmd_handle.redirect_outfile_fd, STDOUT_FILENO) == -1) ||
-                    (dup2(cmd_handle.redirect_outfile_fd, STDERR_FILENO) == -1)) {
-                    write(STDERR_FILENO, error_message, strlen(error_message));
-                    return;
-                }
-                close(cmd_handle.redirect_outfile_fd);
+    for (Command_t cmd_handle : cmd_handles) {
+        if (cmd_handle.is_valid) {
+            size_t num_args = cmd_handle.args.size();
+            char* arg_arr[num_args + 1];
+            for (size_t i = 0; i < num_args; i++) {
+                arg_arr[i] = (char*)cmd_handle.args[i].c_str();
             }
+            arg_arr[num_args] = NULL;
 
-            execv(cmd_handle.cmd_path.c_str(), arg_arr);
-            write(STDERR_FILENO, error_message, strlen(error_message)); // should not reach here if execv successful!
-        }
-        else {
-            int wstatus;
-            wait(&wstatus);
-            if (wstatus == -1) write(STDERR_FILENO, error_message, strlen(error_message));
+            pid_t pid = fork();
+            if (pid == -1) write(STDERR_FILENO, error_message, strlen(error_message));
+            else if (pid == 0) {
+                if (cmd_handle.is_redirect) {
+                    if ((dup2(cmd_handle.redirect_outfile_fd, STDOUT_FILENO) == -1) ||
+                        (dup2(cmd_handle.redirect_outfile_fd, STDERR_FILENO) == -1)) {
+                        write(STDERR_FILENO, error_message, strlen(error_message));
+                        return;
+                    }
+                    close(cmd_handle.redirect_outfile_fd);
+                }
+
+                execv(cmd_handle.cmd_path.c_str(), arg_arr);
+                write(STDERR_FILENO, error_message, strlen(error_message)); // should not reach here if execv successful!
+            }
         }
     }
 
-    // size_t redirect_op_idx = cmd.find('>');
-    // string redirect_outfile_str;
-    // int redirect_outfile_fd;
-    // if (redirect_op_idx != string::npos) {
-    //     redirect_outfile_str = cmd.substr(redirect_op_idx + 1);
-    //     cmd = cmd.substr(0, redirect_op_idx - 1);
-    //     redirect_outfile_str = trim_left(redirect_outfile_str); // there could be more whitespace between redirect operator and filename
-
-    //     // Multiple redirection operators are illegal
-    //     // Finding whitespace within the string after trimming leading whitespace indicates another file (illegal!)
-    //     if ((redirect_outfile_str.find('>') != string::npos) || (redirect_outfile_str.find_first_of(WHITESPACE) != string::npos)) {
-    //         write(STDERR_FILENO, error_message, strlen(error_message));
-    //         return;
-    //     }
-
-    //     redirect_outfile_fd = open(redirect_outfile_str.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    //     if (redirect_outfile_fd == -1) {
-    //         write(STDERR_FILENO, error_message, strlen(error_message));
-    //         return;
-    //     }
-    //     is_redirect = true;
-    // }
-
-    // stringstream args_stream(cmd);
-    // vector<string> arg_vec;
-    // string arg;
-    // while (args_stream >> arg) arg_vec.push_back(arg);
-
-    // string cmd_name = arg_vec[0];
-    // size_t num_args = arg_vec.size();
-    // char* arg_arr[num_args + 1];
-    // for (size_t i = 0; i < num_args; i++) {
-    //     arg_arr[i] = (char*)arg_vec[i].c_str();
-    // }
-    // arg_arr[num_args] = NULL;
-
-    // string cmd_path;
-    // bool cmd_found = false;
-    // for (string var : path_vars) {
-    //     cmd_path = var + "/" + cmd_name;
-    //     cmd_found = access(cmd_path.c_str(), X_OK) == 0;
-    //     if (cmd_found) break;
-    // }
-
-    // if (cmd_found) {
-        // pid_t pid = fork();
-        // if (pid == -1) write(STDERR_FILENO, error_message, strlen(error_message));
-        // else if (pid == 0) {
-        //     if (is_redirect) {
-        //         if ((dup2(redirect_outfile_fd, STDOUT_FILENO) == -1) || (dup2(redirect_outfile_fd, STDERR_FILENO) == -1)) {
-        //             write(STDERR_FILENO, error_message, strlen(error_message));
-        //             return;
-        //         }
-        //         close(redirect_outfile_fd);
-        //     }
-
-        //     execv(cmd_path.c_str(), arg_arr);
-        //     write(STDERR_FILENO, error_message, strlen(error_message)); // should not reach here if execv successful!
-        // }
-        // else {
-        //     int wstatus;
-        //     wait(&wstatus);
-        //     if (wstatus == -1) write(STDERR_FILENO, error_message, strlen(error_message));
-        // }
-    // }
-    // else write(STDERR_FILENO, error_message, strlen(error_message));
+    int wstatus;
+    while (wait(&wstatus) != -1); // wait errors out when there are no child processes to wait for
 }
 
 int main(int argc, char** argv) {
