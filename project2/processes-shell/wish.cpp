@@ -54,12 +54,18 @@ Command_t parse_ext_cmd(string cmd) {
     int redirect_outfile_fd;
     if (redirect_op_idx != string::npos) {
         redirect_outfile_str = cmd.substr(redirect_op_idx + 1);
-        cmd = cmd.substr(0, redirect_op_idx - 1);
         redirect_outfile_str = trim_left(redirect_outfile_str); // there could be more whitespace between redirect operator and filename
 
         // Multiple redirection operators are illegal
         // Finding whitespace within the string after trimming leading whitespace indicates another file (illegal!)
         if ((redirect_outfile_str.find('>') != string::npos) || (redirect_outfile_str.find_first_of(WHITESPACE) != string::npos)) {
+            write(STDERR_FILENO, error_message, strlen(error_message));
+            cmd_handle.is_valid = false;
+            return cmd_handle;
+        }
+
+        cmd = cmd.substr(0, redirect_op_idx);
+        if (cmd == "") {
             write(STDERR_FILENO, error_message, strlen(error_message));
             cmd_handle.is_valid = false;
             return cmd_handle;
@@ -108,15 +114,21 @@ void run_cmd(string cmd) {
     if (cmd == "") return;
     if (cmd == "exit") exit(0);
     if (cmd.substr(0, 2) == "cd") {
+        if (cmd == "cd") {
+            write(STDERR_FILENO, error_message, strlen(error_message));
+            return;
+        }
         if (isspace(cmd[2])) { // deals with the case where you call a command that starts with "cd" but is not cd
             string path = cmd.substr(3);
-            if (path == "") {
+            path = trim_left(path); // there could be more whitespace between "cd" and the input path
+            
+            // Finding whitespace within the string after trimming leading whitespace indicates another argument (illegal!)
+            if (path.find_first_of(WHITESPACE) != string::npos) {
                 write(STDERR_FILENO, error_message, strlen(error_message));
                 return;
             }
 
-            path = trim_left(path); // there could be more whitespace between "cd" and the input path
-            if (chdir(path.c_str()) == -1) { // don't need to check if there are 2 or more arguments because that will also cause chdir to fail
+            if (chdir(path.c_str()) == -1) {
                 write(STDERR_FILENO, error_message, strlen(error_message));
                 return;
             }
@@ -124,8 +136,9 @@ void run_cmd(string cmd) {
         }
     }
     if (cmd.substr(0, 4) == "path") {
-        if (isspace(cmd[4])) { // deals with the case where you call a command that starts with "path" but is not path
-            string paths = cmd.substr(5);
+        // This is a path command if there is whitespace after path or the command is just "path"
+        if (isspace(cmd[4]) || (cmd == "path")) {
+            string paths = cmd.substr(4);
             path_vars.clear();
 
             stringstream path_stream(paths);
