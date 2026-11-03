@@ -1,7 +1,7 @@
 all: gunrock_web
 
 CC = g++
-CFLAGS = -g -Werror -Wall -I include -I shared/include
+CFLAGS = -g -Werror -Wall -I include -fsanitize=thread -I shared/include
 LDFLAGS = -pthread
 VPATH = shared
 

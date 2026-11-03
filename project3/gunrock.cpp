@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 #include <sstream>
-#include <deque>
+#include <queue>
 
 #include "HTTPRequest.h"
 #include "HTTPResponse.h"
@@ -30,6 +30,11 @@ string SCHEDALG = "FIFO";
 string LOGFILE = "/dev/null";
 
 vector<HttpService *> services;
+queue<MySocket*> clients;
+
+pthread_mutex_t buffer_lock;
+pthread_cond_t BufferNotEmpty;
+pthread_cond_t BufferNotFull;
 
 HttpService *find_service(HTTPRequest *request) {
    // find a service that is registered for this path prefix
@@ -102,6 +107,23 @@ void handle_request(MySocket *client) {
   sync_print("close_connection", payload.str());
   client->close();
   delete client;
+  return;
+}
+
+void* worker(void* arg) {
+  while (true) {
+    MySocket* client;
+    dthread_mutex_lock(&buffer_lock);
+    while (clients.empty()) {
+      dthread_cond_wait(&BufferNotEmpty, &buffer_lock);
+    }
+    client = clients.front();
+    clients.pop();
+    dthread_cond_signal(&BufferNotFull);
+    dthread_mutex_unlock(&buffer_lock);
+
+    handle_request(client);
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -137,6 +159,11 @@ int main(int argc, char *argv[]) {
 
   set_log_file(LOGFILE);
 
+  pthread_t thread_pool[THREAD_POOL_SIZE];
+  for (int i = 0; i < THREAD_POOL_SIZE; i++) {
+    dthread_create(thread_pool + i, NULL, worker, NULL);
+  }
+
   sync_print("init", "");
   MyServerSocket *server = new MyServerSocket(PORT);
   MySocket *client;
@@ -149,6 +176,13 @@ int main(int argc, char *argv[]) {
     sync_print("waiting_to_accept", "");
     client = server->accept();
     sync_print("client_accepted", "");
-    handle_request(client);
+
+    dthread_mutex_lock(&buffer_lock);
+    while (clients.size() >= (size_t)BUFFER_SIZE) {
+      dthread_cond_wait(&BufferNotFull, &buffer_lock);
+    }
+    clients.push(client);
+    dthread_cond_signal(&BufferNotEmpty);
+    dthread_mutex_unlock(&buffer_lock);
   }
 }
