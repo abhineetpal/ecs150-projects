@@ -66,17 +66,30 @@ void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {
 }
 
 int LocalFileSystem::lookup(int parentInodeNumber, string name) {
-  super_t super;
-  this->readSuperBlock(&super);
+  inode_t parentInode;
+  int status = stat(parentInodeNumber, &parentInode);
+  if (status != 0) return status;
+  if (parentInode.type != UFS_DIRECTORY) return EINVALIDINODE;
 
-  inode_t inodes[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)];
-  this->readInodeRegion(&super, inodes);
+  for (int dataBlockNum : parentInode.direct) {
+    dir_ent_t dir_entries[UFS_BLOCK_SIZE / sizeof(dir_ent_t)];
+    disk->readBlock(dataBlockNum, dir_entries);
 
-  inode_t parentInode = inodes[parentInodeNumber];
-  assert(parentInode.type == UFS_DIRECTORY);
+    for (dir_ent_t dir_entry : dir_entries) {
+      if (dir_entry.name == name) return dir_entry.inum;
+    }
+  }
+  return ENOTFOUND;
 }
 
 int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
+  super_t super;
+  readSuperBlock(&super);
+  if (inodeNumber > super.num_inodes) return EINVALIDINODE;
+
+  inode_t inodes[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)];
+  readInodeRegion(&super, inodes);
+  *inode = inodes[inodeNumber - 1]; // inodes start from 1 but array is 0-indexed
   return 0;
 }
 
