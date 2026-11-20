@@ -14,31 +14,55 @@ LocalFileSystem::LocalFileSystem(Disk *disk) {
 }
 
 void LocalFileSystem::readSuperBlock(super_t *super) {
+  int superBlock[1000]; // superblock is one block, each block is 4kB large, but int is 4 bytes wide, 4kB/4 = 1kB
+  disk->readBlock(0, superBlock);
 
+  super->inode_bitmap_addr = superBlock[0];
+  super->inode_bitmap_len = superBlock[1];
+  super->data_bitmap_addr = superBlock[2];
+  super->data_bitmap_len = superBlock[3];
+  super->inode_region_addr = superBlock[4];
+  super->inode_region_len = superBlock[5];
+  super->data_region_addr = superBlock[6];
+  super->data_region_len = superBlock[7];
+  super->num_inodes = superBlock[8];
+  super->num_data = superBlock[9];
 }
 
 void LocalFileSystem::readInodeBitmap(super_t *super, unsigned char *inodeBitmap) {
-
+  for (int i = 0; i < super->inode_bitmap_len; i++) {
+    disk->readBlock(super->inode_bitmap_addr + i, inodeBitmap + (4000 * i));
+  }
 }
 
 void LocalFileSystem::writeInodeBitmap(super_t *super, unsigned char *inodeBitmap) {
-
+  for (int i = 0; i < super->inode_bitmap_len; i++) {
+    disk->writeBlock(super->inode_bitmap_addr + i, inodeBitmap + (4000 * i));
+  }
 }
 
 void LocalFileSystem::readDataBitmap(super_t *super, unsigned char *dataBitmap) {
-
+  for (int i = 0; i < super->data_bitmap_len; i++) {
+    disk->readBlock(super->data_bitmap_addr + i, dataBitmap + (4000 * i));
+  }
 }
 
 void LocalFileSystem::writeDataBitmap(super_t *super, unsigned char *dataBitmap) {
-
+  for (int i = 0; i < super->data_bitmap_len; i++) {
+    disk->writeBlock(super->data_bitmap_addr + i, dataBitmap + (4000 * i));
+  }
 }
 
 void LocalFileSystem::readInodeRegion(super_t *super, inode_t *inodes) {
-
+  for (int i = 0; i < super->inode_region_len; i++) {
+    disk->readBlock(super->inode_region_addr + i, inodes + (4000 * i));
+  }
 }
 
 void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {
-
+  for (int i = 0; i < super->inode_region_len; i++) {
+    disk->writeBlock(super->inode_region_addr + i, inodes + (4000 * i));
+  }
 }
 
 int LocalFileSystem::lookup(int parentInodeNumber, string name) {
