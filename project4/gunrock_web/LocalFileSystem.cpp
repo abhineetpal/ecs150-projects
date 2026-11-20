@@ -14,7 +14,7 @@ LocalFileSystem::LocalFileSystem(Disk *disk) {
 }
 
 void LocalFileSystem::readSuperBlock(super_t *super) {
-  int superBlock[1000]; // superblock is one block, each block is 4kB large, but int is 4 bytes wide, 4kB/4 = 1kB
+  int superBlock[UFS_BLOCK_SIZE / sizeof(int)];
   disk->readBlock(0, superBlock);
 
   super->inode_bitmap_addr = superBlock[0];
@@ -31,37 +31,37 @@ void LocalFileSystem::readSuperBlock(super_t *super) {
 
 void LocalFileSystem::readInodeBitmap(super_t *super, unsigned char *inodeBitmap) {
   for (int i = 0; i < super->inode_bitmap_len; i++) {
-    disk->readBlock(super->inode_bitmap_addr + i, inodeBitmap + (4000 * i));
+    disk->readBlock(super->inode_bitmap_addr + i, inodeBitmap + (UFS_BLOCK_SIZE * i));
   }
 }
 
 void LocalFileSystem::writeInodeBitmap(super_t *super, unsigned char *inodeBitmap) {
   for (int i = 0; i < super->inode_bitmap_len; i++) {
-    disk->writeBlock(super->inode_bitmap_addr + i, inodeBitmap + (4000 * i));
+    disk->writeBlock(super->inode_bitmap_addr + i, inodeBitmap + (UFS_BLOCK_SIZE * i));
   }
 }
 
 void LocalFileSystem::readDataBitmap(super_t *super, unsigned char *dataBitmap) {
   for (int i = 0; i < super->data_bitmap_len; i++) {
-    disk->readBlock(super->data_bitmap_addr + i, dataBitmap + (4000 * i));
+    disk->readBlock(super->data_bitmap_addr + i, dataBitmap + (UFS_BLOCK_SIZE * i));
   }
 }
 
 void LocalFileSystem::writeDataBitmap(super_t *super, unsigned char *dataBitmap) {
   for (int i = 0; i < super->data_bitmap_len; i++) {
-    disk->writeBlock(super->data_bitmap_addr + i, dataBitmap + (4000 * i));
+    disk->writeBlock(super->data_bitmap_addr + i, dataBitmap + (UFS_BLOCK_SIZE * i));
   }
 }
 
 void LocalFileSystem::readInodeRegion(super_t *super, inode_t *inodes) {
   for (int i = 0; i < super->inode_region_len; i++) {
-    disk->readBlock(super->inode_region_addr + i, inodes + (4000 * i));
+    disk->readBlock(super->inode_region_addr + i, inodes + (UFS_BLOCK_SIZE * i));
   }
 }
 
 void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {
   for (int i = 0; i < super->inode_region_len; i++) {
-    disk->writeBlock(super->inode_region_addr + i, inodes + (4000 * i));
+    disk->writeBlock(super->inode_region_addr + i, inodes + (UFS_BLOCK_SIZE * i));
   }
 }
 
