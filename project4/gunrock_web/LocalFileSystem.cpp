@@ -55,18 +55,25 @@ void LocalFileSystem::writeDataBitmap(super_t *super, unsigned char *dataBitmap)
 
 void LocalFileSystem::readInodeRegion(super_t *super, inode_t *inodes) {
   for (int i = 0; i < super->inode_region_len; i++) {
-    disk->readBlock(super->inode_region_addr + i, inodes + (UFS_BLOCK_SIZE * i));
+    disk->readBlock(super->inode_region_addr + i, inodes + ((UFS_BLOCK_SIZE / sizeof(inode_t)) * i));
   }
 }
 
 void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {
   for (int i = 0; i < super->inode_region_len; i++) {
-    disk->writeBlock(super->inode_region_addr + i, inodes + (UFS_BLOCK_SIZE * i));
+    disk->writeBlock(super->inode_region_addr + i, inodes + ((UFS_BLOCK_SIZE / sizeof(inode_t)) * i));
   }
 }
 
 int LocalFileSystem::lookup(int parentInodeNumber, string name) {
-  return 0;
+  super_t super;
+  this->readSuperBlock(&super);
+
+  inode_t inodes[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)];
+  this->readInodeRegion(&super, inodes);
+
+  inode_t parentInode = inodes[parentInodeNumber];
+  assert(parentInode.type == UFS_DIRECTORY);
 }
 
 int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
