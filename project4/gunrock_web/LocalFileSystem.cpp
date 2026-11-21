@@ -67,22 +67,27 @@ void LocalFileSystem::writeInodeRegion(super_t *super, inode_t *inodes) {
 
 int LocalFileSystem::lookup(int parentInodeNumber, string name) {
   inode_t parentInode;
-  int status = stat(parentInodeNumber, &parentInode);
-  if (status != 0) return status;
+  if (stat(parentInodeNumber, &parentInode) != 0) return EINVALIDINODE;
   if (parentInode.type != UFS_DIRECTORY) return EINVALIDINODE;
 
+  int num_entries = parentInode.size / sizeof(dir_ent_t);
+  int num_entries_searched = 0;
   for (int dataBlockNum : parentInode.direct) {
     dir_ent_t dir_entries[UFS_BLOCK_SIZE / sizeof(dir_ent_t)];
     disk->readBlock(dataBlockNum, dir_entries);
 
     for (dir_ent_t dir_entry : dir_entries) {
+      if (num_entries_searched == num_entries) return ENOTFOUND; // prevent us from interpreting garbage as a dir entry
       if (dir_entry.name == name) return dir_entry.inum;
+      num_entries_searched++;
     }
   }
   return ENOTFOUND;
 }
 
 int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
+  if (inodeNumber < 1) return EINVALIDINODE;
+
   super_t super;
   readSuperBlock(&super);
   if (inodeNumber > super.num_inodes) return EINVALIDINODE;
@@ -94,7 +99,21 @@ int LocalFileSystem::stat(int inodeNumber, inode_t *inode) {
 }
 
 int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
-  return 0;
+  if (size <= 0) return EINVALIDSIZE;
+
+  inode_t inode;
+  if (stat(inodeNumber, &inode) != 0) return EINVALIDINODE;
+  if (size > inode.size) return EINVALIDSIZE;
+
+  int bytesRead = 0;
+  int directIdx = 0;
+  while (size > 0) {
+    disk->readBlock(inode.direct[directIdx], (char*)(buffer) + (UFS_BLOCK_SIZE * directIdx));
+    bytesRead += size > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : size;
+    size -= UFS_BLOCK_SIZE;
+    directIdx++;
+  }
+  return bytesRead;
 }
 
 int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
