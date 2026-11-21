@@ -103,13 +103,14 @@ int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
 
   inode_t inode;
   if (stat(inodeNumber, &inode) != 0) return EINVALIDINODE;
-  if (size > inode.size) return EINVALIDSIZE;
 
   int bytesRead = 0;
   int directIdx = 0;
   while (size > 0) {
     disk->readBlock(inode.direct[directIdx], (char*)(buffer) + (UFS_BLOCK_SIZE * directIdx));
     bytesRead += size > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : size;
+    if (bytesRead >= inode.size) return inode.size;
+
     size -= UFS_BLOCK_SIZE;
     directIdx++;
   }
@@ -117,7 +118,31 @@ int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
 }
 
 int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
-  return 0;
+  if (name.size() > 28) return EINVALIDNAME;
+
+  inode_t parentInode;
+  if (stat(parentInodeNumber, &parentInode) != 0) return EINVALIDINODE;
+  if (parentInode.type != UFS_DIRECTORY) return EINVALIDINODE;
+
+  int sameNameINode = lookup(parentInodeNumber, name);
+  if (sameNameINode != ENOTFOUND) {
+    inode_t inode;
+    stat(sameNameINode, &inode);
+
+    if (inode.type == type) return sameNameINode;
+    else return EINVALIDTYPE;
+  }
+
+  super_t super;
+  readSuperBlock(&super);
+
+  unsigned char inodeBitmap[UFS_BLOCK_SIZE * super.inode_bitmap_len];
+  readInodeBitmap(&super, inodeBitmap);
+  int inode;
+  for (inode = 3; inode < super.num_inodes; inode++) { // inodes 1 and 2 are reserved
+    int idx = (inode - 1) / 8;
+    unsigned char bitmapByte = inodeBitmap[idx];
+  }
 }
 
 int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
