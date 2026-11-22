@@ -22,12 +22,15 @@ int findFreeInode(super_t *super, unsigned char *inodeBitmap) {
   int inodeNum;
   for (inodeNum = 3; inodeNum < super->num_inodes; inodeNum++) { // inodes 1 and 2 are reserved
     int idx = (inodeNum - 1) / 8;
-    unsigned char shiftBy = (inodeNum - 1) % 8;
     unsigned char bitmapByte = inodeBitmap[idx];
-    if (!((bitmapByte >> shiftBy) & 0x01)) {
-      bitmapByte |= 1 << shiftBy;
-      inodeBitmap[idx] = bitmapByte;
-      return inodeNum;
+    if (bitmapByte == 255) inodeNum = ((idx + 1) * 8) + 1; // go to LSB of next byte if this one is full
+    else {
+      unsigned char shiftBy = (inodeNum - 1) % 8;
+      if (!((bitmapByte >> shiftBy) & 0x01)) {
+        bitmapByte |= 1 << shiftBy;
+        inodeBitmap[idx] = bitmapByte;
+        return inodeNum;
+      }
     }
   }
   return -ENOTENOUGHSPACE;
@@ -39,12 +42,15 @@ int findFreeDataBlock(super_t *super, unsigned char *dataBitmap) {
   int dataBlockNum;
   for (dataBlockNum = 0; dataBlockNum < super->num_data; dataBlockNum++) {
     int idx = dataBlockNum / 8;
-    unsigned char shiftBy = dataBlockNum % 8;
     unsigned char bitmapByte = dataBitmap[idx];
-    if (!((bitmapByte >> shiftBy) & 0x01)) {
-      bitmapByte |= 1 << shiftBy;
-      dataBitmap[idx] = bitmapByte;
-      return dataBlockNum;
+    if (bitmapByte == 255) dataBlockNum = ((idx + 1) * 8) + 1; // go to LSB of next byte if this one is full
+    else {
+      unsigned char shiftBy = dataBlockNum % 8;
+      if (!((bitmapByte >> shiftBy) & 0x01)) {
+        bitmapByte |= 1 << shiftBy;
+        dataBitmap[idx] = bitmapByte;
+        return dataBlockNum;
+      }
     }
   }
   return -ENOTENOUGHSPACE;
