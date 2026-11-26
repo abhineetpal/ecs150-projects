@@ -172,7 +172,7 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
   if (parentInode.type != UFS_DIRECTORY) return -EINVALIDINODE;
 
   int sameNameInodeNum = lookup(parentInodeNumber, name);
-  if (sameNameInodeNum != -ENOTFOUND) {
+  if (sameNameInodeNum > 0) {
     inode_t inode;
     stat(sameNameInodeNum, &inode);
 
@@ -185,12 +185,12 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
   unsigned char inodeBitmap[UFS_BLOCK_SIZE * super.inode_bitmap_len];
   readInodeBitmap(&super, inodeBitmap);
   int inodeNum = findFreeInode(&super, inodeBitmap);
-  if (inodeNum == -ENOTENOUGHSPACE) return -ENOTENOUGHSPACE;
+  if (inodeNum < 0) return -ENOTENOUGHSPACE;
 
   unsigned char dataBitmap[UFS_BLOCK_SIZE * super.data_bitmap_len];
   readDataBitmap(&super, dataBitmap);
   int dataBlockNum = findFreeDataBlock(&super, dataBitmap);
-  if (dataBlockNum == -ENOTENOUGHSPACE) return -ENOTENOUGHSPACE;
+  if (dataBlockNum < 0) return -ENOTENOUGHSPACE;
 
   int num_entries = parentInode.size / sizeof(dir_ent_t);
   int parentNumBlocksAllocated = numBlocksNeeded(parentInode.size);
@@ -209,6 +209,8 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
       for (int j = 0; j < parentNumBlocksAllocated; j++) {
         disk->writeBlock(parentInode.direct[j], dir_entries + ((UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * j));
       }
+      writeInodeBitmap(&super, inodeBitmap);
+      writeDataBitmap(&super, dataBitmap);
       break;
     }
   }
@@ -228,11 +230,38 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
 
       int lastBlockIdx = parentNumBlocksAllocated - 1;
       disk->writeBlock(parentInode.direct[lastBlockIdx], dir_entries + ((UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * lastBlockIdx));
+
+      writeInodeBitmap(&super, inodeBitmap);
+      writeDataBitmap(&super, dataBitmap);
+    }
+    else {
+      if (parentNumBlocksAllocated == DIRECT_PTRS) return -ENOTENOUGHSPACE;
+
+      int parentNewDataBlockNum = findFreeDataBlock(&super, dataBitmap);
+      if (parentNewDataBlockNum < 0) return -ENOTENOUGHSPACE;
+
+      dir_ent_t new_dir_entry_block[UFS_BLOCK_SIZE / sizeof(dir_ent_t)];
+      disk->readBlock(parentNewDataBlockNum, new_dir_entry_block);
+      dir_ent_t new_dir_entry = new_dir_entry_block[0];
+      new_dir_entry.inum = inodeNum;
+      memset(new_dir_entry.name, 0, 28); // remove garbage
+      memcpy(new_dir_entry.name, name.c_str(), name.size());
+      new_dir_entry_block[0] = new_dir_entry;
+      parentInode.size += sizeof(dir_ent_t);
+      parentInode.direct[parentNumBlocksAllocated] = parentNewDataBlockNum;
+
+      writeInodeBitmap(&super, inodeBitmap);
+      writeDataBitmap(&super, dataBitmap);
+
+      inode_t inodes[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)];
+      readInodeRegion(&super, inodes);
+      inodes[parentInodeNumber - 1] = parentInode; // inodes start from 1 but array is 0-indexed
+      writeInodeRegion(&super, inodes);
+
+      int lastBlockIdx = parentNumBlocksAllocated;
+      disk->writeBlock(parentInode.direct[lastBlockIdx], dir_entries + ((UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * lastBlockIdx));
     }
   }
-
-  writeInodeBitmap(&super, inodeBitmap);
-  writeDataBitmap(&super, dataBitmap);
 
   inode_t newInode;
   newInode.type = type;
