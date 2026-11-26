@@ -209,6 +209,7 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
       for (int j = 0; j < parentNumBlocksAllocated; j++) {
         disk->writeBlock(parentInode.direct[j], dir_entries + ((UFS_BLOCK_SIZE / sizeof(dir_ent_t)) * j));
       }
+
       writeInodeBitmap(&super, inodeBitmap);
       writeDataBitmap(&super, dataBitmap);
       break;
@@ -241,7 +242,6 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
       if (parentNewDataBlockNum < 0) return -ENOTENOUGHSPACE;
 
       dir_ent_t new_dir_entry_block[UFS_BLOCK_SIZE / sizeof(dir_ent_t)];
-      disk->readBlock(parentNewDataBlockNum, new_dir_entry_block);
       dir_ent_t new_dir_entry = new_dir_entry_block[0];
       new_dir_entry.inum = inodeNum;
       memset(new_dir_entry.name, 0, 28); // remove garbage
@@ -263,10 +263,33 @@ int LocalFileSystem::create(int parentInodeNumber, int type, string name) {
     }
   }
 
-  inode_t newInode;
+  inode_t inodes[super.inode_region_len * UFS_BLOCK_SIZE / sizeof(inode_t)];
+  readInodeRegion(&super, inodes);
+  inode_t newInode = inodes[inodeNum - 1]; // inodes start from 1 but array is 0-indexed
   newInode.type = type;
   newInode.size = type == UFS_REGULAR_FILE ? 0 : (2 * sizeof(dir_ent_t));
   newInode.direct[0] = dataBlockNum;
+  inodes[inodeNum - 1] = newInode;
+  writeInodeRegion(&super, inodes);
+
+  if (type == UFS_DIRECTORY) {
+    dir_ent_t new_dir_entries[UFS_BLOCK_SIZE / sizeof(dir_ent_t)];
+
+    dir_ent_t this_dir_entry = new_dir_entries[0];
+    this_dir_entry.inum = inodeNum;
+    memset(this_dir_entry.name, 0, 28); // remove garbage
+    this_dir_entry.name[0] = '.';
+    new_dir_entries[0] = this_dir_entry;
+
+    dir_ent_t parent_dir_entry = new_dir_entries[1];
+    parent_dir_entry.inum = parentInodeNumber;
+    memset(parent_dir_entry.name, 0, 28); // remove garbage
+    parent_dir_entry.name[0] = '.';
+    parent_dir_entry.name[1] = '.';
+    new_dir_entries[1] = parent_dir_entry;
+
+    disk->writeBlock(dataBlockNum, new_dir_entries);
+  }
 }
 
 int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
