@@ -172,14 +172,19 @@ int LocalFileSystem::read(int inodeNumber, void *buffer, int size) {
 
   int bytesRead = 0;
   int directIdx = 0;
+  char* tmp_buffer[numBlocksNeeded(size) * UFS_BLOCK_SIZE];
   while (size > 0) {
-    disk->readBlock(inode.direct[directIdx], (char*)(buffer) + (UFS_BLOCK_SIZE * directIdx));
+    disk->readBlock(inode.direct[directIdx], tmp_buffer + (UFS_BLOCK_SIZE * directIdx));
     bytesRead += size > UFS_BLOCK_SIZE ? UFS_BLOCK_SIZE : size;
-    if (bytesRead >= inode.size) return inode.size;
+    if (bytesRead >= inode.size) {
+      bytesRead = inode.size;
+      break;
+    }
 
     size -= UFS_BLOCK_SIZE;
     directIdx++;
   }
+  memcpy(buffer, tmp_buffer, bytesRead);
   return bytesRead;
 }
 
@@ -365,6 +370,8 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   inodes[inodeNumber - 1] = inode; // inodes start at 1 but array is 0-indexed
   writeInodeRegion(&super, inodes);
 
+  char* tmp_buffer[numBlocksNeeded(size) * UFS_BLOCK_SIZE];
+  memcpy(tmp_buffer, buffer, size);
   for (int i = 0; i < numBlocksAllocated; i++) {
     disk->writeBlock(inode.direct[i], (char*)(buffer) + (UFS_BLOCK_SIZE * i));
   }
