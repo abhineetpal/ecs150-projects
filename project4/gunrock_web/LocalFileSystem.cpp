@@ -368,6 +368,7 @@ int LocalFileSystem::write(int inodeNumber, const void *buffer, int size) {
   for (int i = 0; i < numBlocksAllocated; i++) {
     disk->writeBlock(inode.direct[i], (char*)(buffer) + (UFS_BLOCK_SIZE * i));
   }
+  return size;
 }
 
 int LocalFileSystem::unlink(int parentInodeNumber, string name) {
